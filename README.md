@@ -1,4 +1,4 @@
-# Embedded Systems & Arduino Projects Portfolio 🔌🤖
+# Embedded Systems & Arduino Projects Portfolio 
 
 A comprehensive collection of hardware-software integration projects developed in C/C++ for the **Arduino Uno** ecosystem. This repository demonstrates practical applications of microcontroller programming, ranging from basic analog hardware interactions to complex real-time multitasking systems.
 
