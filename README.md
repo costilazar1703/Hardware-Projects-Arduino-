@@ -1,40 +1,53 @@
-# Embedded Systems & Arduino Projects Portfolio 
+# Arduino Projects
 
-A comprehensive collection of hardware-software integration projects developed in C/C++ for the **Arduino Uno** ecosystem. This repository demonstrates practical applications of microcontroller programming, ranging from basic analog hardware interactions to complex real-time multitasking systems.
+Projects written in C/C++ for the Arduino Uno, built and tested on a breadboard. Each folder contains one project and its `.ino` sketch.
 
-## 📂 Projects Directory
+## Projects
 
-The repository is organized into individual projects, ranked from most complex to fundamental hardware interactions:
+### 1. Railway Level Crossing System (`Railway-Level-Crossing-System`)
+**Stack:** Arduino Uno, FreeRTOS, C++
 
-### 1. Railway Level Crossing System (`/Railway-Level-Crossing-System`)
-* **Tech Stack:** Arduino Uno, FreeRTOS, C++
-* **Description:** A real-time safety simulation using **FreeRTOS** to manage concurrent tasks. It seamlessly processes data from **HC-SR04 ultrasonic sensors** to detect approaching trains while simultaneously driving **SG90 servo motors** for the barrier and triggering acoustic alarms. Features strict fail-safe event prioritization to eliminate latency.
+- Two HC-SR04 ultrasonic sensors detect the train: one lowers the barrier, the other raises it.
+- An SG90 servo moves the barrier, red/green LEDs show the crossing state and a buzzer sounds while the train is passing.
+- `Railway_FreeRTOS.ino` runs three FreeRTOS tasks (train detection, barrier control, alarm) that talk through a queue. Lowering the barrier always has priority over raising it (fail-safe).
+- `ProiectPATR_BarieraTren.ino` is the first, simpler version without an RTOS.
 
-### 2. Automated Parking Barrier System (`/Automated-Parking-Barrier-System`)
-* **Tech Stack:** Arduino, Analog Electronics
-* **Description:** A complete logic control system for parking access. Integrates ultrasonic distance measurement with servomotor state machines to automate entry and exit, complete with hardware-level noise-filtering capacitors to ensure consistent sensor readings.
+### 2. Automated Parking Barrier System (`Automated-Parking-Barrier-System`)
+**Stack:** Arduino, C++, analog electronics
 
-### 3. Multi-Sensor Fire Detection (`/Multi-Sensor-Fire-Detection-System`)
-* **Tech Stack:** Arduino, Sensor Fusion
-* **Description:** A hybrid environmental monitoring system. It cross-validates data from multiple analog sources (flame and temperature sensors) to eliminate false positives and trigger multi-stage alarm protocols based on dynamic thresholds.
+- Three HC-SR04 sensors: entry, exit and the parking spots.
+- The servo barrier is driven by a state machine (open, wait for the car, close) built on `millis()`, without blocking delays.
+- After a car enters or leaves, the 16x2 LCD shows which spots are taken.
+- Capacitors on the hardware side filter noise so the sensor readings stay consistent.
 
-### 4. Ultrasonic Parking Sensor (`/Ultrasonic-Parking-Sensor`)
-* **Tech Stack:** Arduino, Distance Calculation
-* **Description:** A fundamental driver-assistance simulation. Uses HC-SR04 acoustic wave reflections to calculate real-time distance and map it to visual/audio warning frequencies.
+### 3. Multi-Sensor Fire Detection (`Multi-Sensor-Fire-Detection-System`)
+**Stack:** Arduino, C++ (classes)
 
-### 5. Joystick Color Game (`/Joystick-Color-Game`)
-* **Tech Stack:** Arduino, GPIO Polling
-* **Description:** A hardware interaction project mapping physical analog joystick inputs (X/Y axes) to dynamic RGB LED color mixing and state changes.
+- Uses a flame sensor (digital) and an LM35 temperature sensor (analog).
+- The alarm (red LED, buzzer, LCD message) starts when the flame sensor triggers or the temperature goes over the threshold.
+- To cut false alarms, the danger has to be confirmed on 3 consecutive readings, and the temperature is averaged over several ADC samples.
 
-## 🛠️ Core Skills & Hardware Demonstrated
-* **Microcontroller Programming:** C/C++ (Arduino IDE), GPIO manipulation, memory optimization.
-* **Real-Time Operating Systems:** Task scheduling, synchronization, and deadlock prevention using FreeRTOS.
-* **Hardware Components:** Arduino Uno, HC-SR04 (Ultrasonic), SG90 (Servos), analog sensors, breadboarding.
-* **Electronics:** Circuit design, signal calibration, and hardware debouncing.
+### 4. Ultrasonic Parking Sensor (`Ultrasonic-Parking-Sensor`)
+**Stack:** Arduino, distance measurement
 
-## 💻 How to Use
-Each folder contains its own `.ino` source file. To run any project:
+- Two HC-SR04 sensors watch three parking spots; the distance thresholds were calibrated by hand.
+- The LCD shows which spots are taken, and the servo barrier opens when a car arrives at the entry or leaves a spot.
+- A spot change is accepted only after several identical readings, so a single bad echo does not move the barrier.
+
+### 5. Joystick Color Game (`Joystick-Color-Game`)
+**Stack:** Arduino, GPIO, ADC
+
+- Reads the X/Y axes of an analog joystick and lights one of four LEDs for each direction.
+- The joystick button turns the LEDs on and off (edge detection with software debouncing).
+
+## Skills used
+- C/C++ on microcontrollers: GPIO, ADC readings, timing with `millis()`.
+- FreeRTOS: tasks, priorities, queues.
+- Components: Arduino Uno, HC-SR04, SG90 servo, LM35, flame sensor, 16x2 LCD, joystick, breadboard.
+- Sensor calibration and debouncing.
+
+## How to run
 1. Clone the repository.
-2. Open the desired `.ino` file in the [Arduino IDE](https://www.arduino.cc/en/software).
-3. Connect your Arduino Uno board and verify the COM port.
-4. Compile and upload the code to the microcontroller.
+2. Open the `.ino` file in the Arduino IDE (for the FreeRTOS version, install the "FreeRTOS" library from the Library Manager).
+3. Select the Arduino Uno board and the COM port.
+4. Compile and upload.
