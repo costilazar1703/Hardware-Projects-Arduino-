@@ -1,133 +1,103 @@
 #include <LiquidCrystal.h>
-#include <Servo.h>
 
-#define TRIG1 2
-#define ECHO1 3
-#define TRIG2 4
-#define ECHO2 5
-#define SERVO_PIN 6
-#define TRIG3 A0
-#define ECHO3 A1
-
+// LCD: rs, en, d4, d5, d6, d7
 LiquidCrystal lcd(7, 8, 9, 10, 11, 12);
-Servo bariera;
 
-const int ANGLE_OPEN = 0;                        // ridică bariera
-const int ANGLE_CLOSED = 90;                     // coboară bariera
-const unsigned long TIMP_BARIERA_DESCHISA = 4000;  // ms
-const unsigned long PERIOADA_CITIRE = 200;         // ms între serii de măsurători
-const byte CONFIRMARI = 3;                         // câte citiri la rând confirmă o schimbare
+// Pini (schimbă-i dacă montajul tău e diferit)
+const int trigPin = 2;
+const int echoPin = 3;
+const int ledPin = 5;        // pin PWM: luminozitatea crește când obstacolul e aproape
+const int buzzerPin = 6;     // buzzer pasiv, comandat cu tone()
 
-bool bariereDeschisa = false;
-unsigned long momentDeschidere = 0;
-unsigned long ultimaCitire = 0;
-byte maskConfirmat = 0;     // bit0 = loc 1, bit1 = loc 2, bit2 = loc 3
-byte maskCandidat = 0;
-byte nrConfirmari = 0;
-byte nrIntrare = 0;
+// Zone de distanță (cm)
+const int DIST_MAX = 100;    // peste 100 cm senzorul tace
+const int DIST_STOP = 10;    // sub 10 cm sunet continuu
 
-long readDistanceCM(int trigPin, int echoPin) {
+const unsigned long PERIOADA_MASURARE = 60;   // HC-SR04 are nevoie de ~60 ms între măsurători
+const unsigned long PERIOADA_LCD = 250;       // LCD-ul nu se rescrie la fiecare măsurare
+const unsigned long DURATA_BIP = 50;          // cât ține un bip
+
+long distanta = -1;          // -1 = nimic în față / fără ecou
+unsigned long ultimaMasurare = 0;
+unsigned long ultimulLcd = 0;
+unsigned long ultimulBip = 0;
+
+long masoaraDistanta() {
   digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
   digitalWrite(trigPin, HIGH);
   delayMicroseconds(10);
   digitalWrite(trigPin, LOW);
-
-  long duration = pulseIn(echoPin, HIGH, 30000);   // 0 = fără ecou (timeout)
-  long distance = duration * 0.034 / 2;
-  return distance;
+  long durata = pulseIn(echoPin, HIGH, 30000);   // timeout 30 ms (~5 m)
+  if (durata == 0) return -1;
+  return durata * 0.034 / 2;   // cm
 }
 
-void afiseazaStatus(byte mask) {
-  lcd.clear();
+// cu cât e mai aproape, cu atât bipurile sunt mai dese și mai ascuțite
+void actualizeazaSunetSiLed(unsigned long acum) {
+  if (distanta < 0 || distanta > DIST_MAX) {
+    noTone(buzzerPin);
+    analogWrite(ledPin, 0);
+    return;
+  }
+
+  long d = constrain(distanta, DIST_STOP, DIST_MAX);
+  analogWrite(ledPin, map(d, DIST_STOP, DIST_MAX, 255, 10));
+  int frecventa = map(d, DIST_STOP, DIST_MAX, 2500, 1000);
+
+  if (distanta <= DIST_STOP) {
+    tone(buzzerPin, frecventa);          // foarte aproape: sunet continuu
+    return;
+  }
+
+  unsigned long pauza = map(d, DIST_STOP, DIST_MAX, 80, 800);
+  if (acum - ultimulBip >= DURATA_BIP + pauza) {
+    ultimulBip = acum;
+    tone(buzzerPin, frecventa, DURATA_BIP);
+  }
+}
+
+void afiseazaLcd() {
   lcd.setCursor(0, 0);
-  lcd.print("Locuri ocupate:");
-  lcd.setCursor(0, 1);
-  if (mask & 1) lcd.print("1 ");
-  if (mask & 2) lcd.print("2 ");
-  if (mask & 4) lcd.print("3 ");
-  if (mask == 0) lcd.print("niciunul");
-}
+  if (distanta < 0 || distanta > DIST_MAX) {
+    lcd.print("Distanta: --    ");
+  } else {
+    lcd.print("Distanta: ");
+    lcd.print(distanta);
+    lcd.print(" cm   ");
+  }
 
-// ridică bariera și pornește cronometrul (se închide în loop)
-void deschideBariera(const char *mesaj) {
-  lcd.clear();
-  lcd.print(mesaj);
-  bariera.write(ANGLE_OPEN);
-  bariereDeschisa = true;
-  momentDeschidere = millis();
+  lcd.setCursor(0, 1);
+  if (distanta < 0 || distanta > DIST_MAX) lcd.print("Liber           ");
+  else if (distanta <= DIST_STOP)          lcd.print("STOP!           ");
+  else if (distanta <= 30)                 lcd.print("Foarte aproape  ");
+  else                                     lcd.print("Atentie         ");
 }
 
 void setup() {
   lcd.begin(16, 2);
-  bariera.attach(SERVO_PIN);
-  bariera.write(ANGLE_CLOSED);        // pornim cu bariera jos
-  pinMode(TRIG1, OUTPUT);
-  pinMode(ECHO1, INPUT);
-  pinMode(TRIG2, OUTPUT);
-  pinMode(ECHO2, INPUT);
-  pinMode(TRIG3, OUTPUT);
-  pinMode(ECHO3, INPUT);
-  lcd.print("Sistem parcare");
-  delay(2000);
-  afiseazaStatus(0);
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  pinMode(ledPin, OUTPUT);
+  pinMode(buzzerPin, OUTPUT);
+
+  lcd.print("Senzor parcare");
+  delay(1500);
+  lcd.clear();
 }
 
 void loop() {
   unsigned long acum = millis();
 
-  // coboară bariera după 4 secunde
-  if (bariereDeschisa && acum - momentDeschidere >= TIMP_BARIERA_DESCHISA) {
-    bariera.write(ANGLE_CLOSED);
-    bariereDeschisa = false;
-    afiseazaStatus(maskConfirmat);
+  if (acum - ultimaMasurare >= PERIOADA_MASURARE) {
+    ultimaMasurare = acum;
+    distanta = masoaraDistanta();
   }
 
-  if (acum - ultimaCitire < PERIOADA_CITIRE) return;
-  ultimaCitire = acum;
+  actualizeazaSunetSiLed(acum);
 
-  long distIntrare = readDistanceCM(TRIG1, ECHO1);
-  long distSenzor2 = readDistanceCM(TRIG2, ECHO2); // Loc 1 & 2
-  long distSenzor3 = readDistanceCM(TRIG3, ECHO3); // Loc 2 & 3
-
-  // Ridica bariera la intrare (2 citiri la rând)
-  if (distIntrare > 0 && distIntrare <= 9) {
-    if (nrIntrare < 2) nrIntrare++;
-  } else {
-    nrIntrare = 0;
-  }
-  if (nrIntrare >= 2 && !bariereDeschisa) {
-    deschideBariera("Masina detectata");
-    nrIntrare = 0;
-  }
-
-  // pragurile calibrate manual (la numere întregi, >7.1 = >7 și >11.1 = >11)
-  bool loc1 = false, loc2 = false, loc3 = false;
-
-  if (distSenzor2 > 0 && distSenzor2 <= 7) loc1 = true;
-
-  if ((distSenzor2 > 7 && distSenzor2 <= 16) ||
-      (distSenzor3 > 11 && distSenzor3 <= 20)) loc2 = true;
-
-  if (distSenzor3 > 0 && distSenzor3 <= 10) loc3 = true;
-
-  byte mask = (loc1 ? 1 : 0) | (loc2 ? 2 : 0) | (loc3 ? 4 : 0);
-
-  // o schimbare se acceptă după 3 citiri la rând, ca un ecou greșit să nu deschidă bariera
-  if (mask == maskCandidat) {
-    if (nrConfirmari < CONFIRMARI) nrConfirmari++;
-  } else {
-    maskCandidat = mask;
-    nrConfirmari = 1;
-  }
-
-  if (nrConfirmari >= CONFIRMARI && maskCandidat != maskConfirmat) {
-    bool pleaca = (maskConfirmat & ~maskCandidat) != 0;   // un loc a trecut din ocupat în liber
-    maskConfirmat = maskCandidat;
-    if (pleaca) {
-      deschideBariera("Masina pleaca...");
-    } else if (!bariereDeschisa) {
-      afiseazaStatus(maskConfirmat);
-    }
+  if (acum - ultimulLcd >= PERIOADA_LCD) {
+    ultimulLcd = acum;
+    afiseazaLcd();
   }
 }

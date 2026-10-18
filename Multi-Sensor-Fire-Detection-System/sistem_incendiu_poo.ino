@@ -2,17 +2,22 @@
 
 LiquidCrystal lcd(12, 11, 2, 3, 4, 5);
 
-// Pini actuatori. LED verde pe 9 (pinul 1 e TX serial și încurcă uploadul)
-const int ledGreen = 9;
+// Pini
+const int ledGreen = 9;      // pinul 1 e TX serial și încurcă uploadul
 const int ledRed = 6;
 const int buzzer = 7;
-const int pinFlacara = 8;    // senzor de flacără digital (HIGH = flacără detectată)
-const int pinTemp = A1;      // senzor de temperatură analogic (LM35: 10 mV / °C)
+const int pinFlacara = 8;    // senzor de flacără, HIGH = flacără
+const int pinTemp = A1;      // LM35, 10 mV / °C
 
-const float PRAG_TEMPERATURA = 100.0f;           // °C
-const int NR_ESANTIOANE = 8;                     // media citirilor ADC reduce zgomotul
-const unsigned long INTERVAL_CITIRE = 300;       // ms între măsurători (fără delay)
-const byte CONFIRMARI_NECESARE = 3;              // citiri consecutive înainte de alarmă
+// Praguri
+const float PRAG_TEMP = 50.0f;      // temperatura care confirmă flacăra
+const float PRAG_CRITIC = 70.0f;    // peste asta e alarmă și fără flacără
+const int NR_ESANTIOANE = 8;        // media citirilor ADC
+const unsigned long INTERVAL_CITIRE = 300;   // ms
+const byte CONFIRMARI_NECESARE = 3;          // citiri la rând înainte de alarmă
+
+// Stările sistemului
+enum Stare { NORMAL, VERIFICARE, PERICOL };
 
 class Senzor {
 private:
@@ -41,7 +46,6 @@ public:
         return (valoare * 5.0 / 1023.0) * 100.0;
     }
 
-    // folosește pragul din constructor
     bool depasestePrag(float temperatura) {
         return temperatura > pragTemp;
     }
@@ -64,18 +68,9 @@ public:
     }
 
     // rescriu liniile întregi, fără lcd.clear(), ca să nu clipească
-    void afisareNormal(float temperatura) {
+    void afisare(const char *mesaj, float temperatura) {
         lcd.setCursor(0, 0);
-        lcd.print("Sistem normal   ");
-        lcd.setCursor(0, 1);
-        lcd.print("Temp: ");
-        lcd.print(temperatura, 1);
-        lcd.print(" C   ");
-    }
-
-    void afisarePericol(float temperatura) {
-        lcd.setCursor(0, 0);
-        lcd.print("PERICOL! FOC!   ");
+        lcd.print(mesaj);
         lcd.setCursor(0, 1);
         lcd.print("Temp: ");
         lcd.print(temperatura, 1);
@@ -84,11 +79,20 @@ public:
 };
 
 Senzor senzorFlacara(A0, pinFlacara);
-Senzor senzorTemp(pinTemp, PRAG_TEMPERATURA);
+Senzor senzorTemp(pinTemp, PRAG_TEMP);
 DisplayManager display;
 
 byte confirmari = 0;
 unsigned long ultimaCitire = 0;
+bool ledAprins = false;
+
+// Verificarea încrucișată: un singur senzor nu e suficient pentru alarmă
+Stare evalueaza(bool flacara, float temperatura) {
+    bool tempMare = senzorTemp.depasestePrag(temperatura);
+    if ((flacara && tempMare) || temperatura > PRAG_CRITIC) return PERICOL;
+    if (flacara || tempMare) return VERIFICARE;
+    return NORMAL;
+}
 
 void setup() {
     pinMode(ledGreen, OUTPUT);
@@ -100,33 +104,44 @@ void setup() {
 }
 
 void loop() {
-    // măsor la 300 ms, fără delay
     unsigned long acum = millis();
     if (acum - ultimaCitire < INTERVAL_CITIRE) return;
     ultimaCitire = acum;
 
     float temperatura = senzorTemp.citesteTemperatura();
-    bool flacaraDetectata = senzorFlacara.detecteazaFlacara();
+    bool flacara = senzorFlacara.detecteazaFlacara();
+    Stare stare = evalueaza(flacara, temperatura);
 
-    // OR: oricare senzor poate da alarma (siguranță). Pentru mai puține alarme
-    // false, trebuie 3 citiri la rând.
-    bool pericol = flacaraDetectata || senzorTemp.depasestePrag(temperatura);
-    if (pericol) {
+    // pericolul trebuie să se repete 3 citiri la rând
+    if (stare == PERICOL) {
         if (confirmari < CONFIRMARI_NECESARE) confirmari++;
+        if (confirmari < CONFIRMARI_NECESARE) stare = VERIFICARE;
     } else {
         confirmari = 0;
     }
-    bool alarma = (confirmari >= CONFIRMARI_NECESARE);
 
-    if (alarma) {
-        digitalWrite(ledRed, HIGH);
-        digitalWrite(ledGreen, LOW);
-        digitalWrite(buzzer, HIGH);
-        display.afisarePericol(temperatura);
-    } else {
-        digitalWrite(ledRed, LOW);
-        digitalWrite(ledGreen, HIGH);
-        digitalWrite(buzzer, LOW);
-        display.afisareNormal(temperatura);
+    switch (stare) {
+        case PERICOL:
+            digitalWrite(ledRed, HIGH);
+            digitalWrite(ledGreen, LOW);
+            digitalWrite(buzzer, HIGH);
+            display.afisare("PERICOL! FOC!   ", temperatura);
+            break;
+
+        case VERIFICARE:
+            // un singur senzor a reacționat: LED roșu clipește, fără sirenă
+            ledAprins = !ledAprins;
+            digitalWrite(ledRed, ledAprins);
+            digitalWrite(ledGreen, LOW);
+            digitalWrite(buzzer, LOW);
+            display.afisare(flacara ? "Flacara? Verific" : "Temp mare? Verif", temperatura);
+            break;
+
+        default:
+            digitalWrite(ledRed, LOW);
+            digitalWrite(ledGreen, HIGH);
+            digitalWrite(buzzer, LOW);
+            display.afisare("Sistem normal   ", temperatura);
+            break;
     }
 }
