@@ -1,11 +1,30 @@
 // Definire pini
-const int pinBecuri[] = {1, 2, 3, 4};
-const int pinButon = 0;
+// ATENȚIE: pinii 0 și 1 sunt RX/TX (serial/USB) și pot bloca încărcarea codului.
+// Mută firele: becurile pe 2, 3, 4, 5 și butonul joystick-ului pe 7.
+const int pinBecuri[] = {2, 3, 4, 5};
+const int pinButon = 7;
 const int pinVRx = A0;
 const int pinVRy = A1;
 
+const unsigned long DEBOUNCE_MS = 50;
+
 // Variabile de stare
 bool becuriPornite = true;
+int stareButonAnterioara = HIGH;
+unsigned long ultimaSchimbare = 0;
+
+// Funcție pentru a controla toate becurile
+void toateBecurile(bool stare) {
+  for (int i = 0; i < 4; i++) {
+    digitalWrite(pinBecuri[i], stare);
+  }
+}
+
+// Funcție pentru aprinderea unui bec
+void aprindeBec(int index) {
+  toateBecurile(LOW);
+  digitalWrite(pinBecuri[index], HIGH);
+}
 
 void setup() {
   // Configurare pini becuri ca ieșire
@@ -43,25 +62,14 @@ void loop() {
     }
   }
 
-  // Buton joystick apăsat
-  if (stareButon == LOW) {
-    delay(200); // Debounce
+  // Buton joystick apăsat: reacționăm doar la APĂSARE (front HIGH -> LOW),
+  // nu cât timp e ținut, iar debounce-ul se face cu millis(), fără delay(200)
+  unsigned long acum = millis();
+  if (stareButon == LOW && stareButonAnterioara == HIGH &&
+      acum - ultimaSchimbare >= DEBOUNCE_MS) {
+    ultimaSchimbare = acum;
     becuriPornite = !becuriPornite;
     toateBecurile(becuriPornite ? HIGH : LOW);
   }
+  stareButonAnterioara = stareButon;
 }
-
-// Funcție pentru aprinderea unui bec
-void aprindeBec(int index) {
-  toateBecurile(LOW);
-  digitalWrite(pinBecuri[index], HIGH);
-}
-
-// Funcție pentru a controla toate becurile
-void toateBecurile(bool stare) {
-  for (int i = 0; i < 4; i++) {
-    digitalWrite(pinBecuri[i], stare);
-  }
-}
-
-
