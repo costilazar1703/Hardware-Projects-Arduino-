@@ -17,27 +17,58 @@ const int servoPin = 13;
 
 Servo bariera;
 
+// Mașină de stări: fiecare pas durează sau așteaptă, fără delay() blocant
+enum Stare { LIBER, DESCHIDE, TRECE, INCHIDE, ASTEAPTA_LOC, AFISEAZA };
+Stare stare = LIBER;
+bool esteIntrare = true;
+int pos = 0;                          // 0 = bariera închisă, 90 = deschisă
+unsigned long tStare = 0;             // momentul intrării în starea curentă
+unsigned long tPas = 0;               // ultimul pas al servo-ului
+unsigned long ultimaCitire = 0;
+byte nrIntrare = 0;
+byte nrIesire = 0;
+
+const unsigned long PAS_SERVO_MS = 10;
+const unsigned long TIMP_TRECERE = 3000;
+const unsigned long PERIOADA_CITIRE = 300;
+
 long masurareDistanta(int trig, int echo) {
   digitalWrite(trig, LOW);
   delayMicroseconds(2);
   digitalWrite(trig, HIGH);
   delayMicroseconds(10);
   digitalWrite(trig, LOW);
-  long durata = pulseIn(echo, HIGH);
+  long durata = pulseIn(echo, HIGH, 30000);   // timeout: fără ecou returnează 0
   return durata * 0.034 / 2;  // în cm
 }
 
-void deschideBariera() {
-  for (int pos = 0; pos <= 90; pos++) {
-    bariera.write(pos);
-    delay(10);
-  }
+void treciLa(Stare nou) {
+  stare = nou;
+  tStare = millis();
 }
 
-void inchideBariera() {
-  for (int pos = 90; pos >= 0; pos--) {
-    bariera.write(pos);
-    delay(10);
+void afiseazaLocuri(long distParcare) {
+  lcd.clear();
+  if (esteIntrare) {
+    if (distParcare > 24) {
+      lcd.print("Locuri libere");
+    } else if (distParcare > 15) {
+      lcd.print("Loc ocupat: 1");
+    } else if (distParcare > 6) {
+      lcd.print("Loc ocupat: 2");
+    } else {
+      lcd.print("Loc ocupat: 3");
+    }
+  } else {
+    if (distParcare > 24) {
+      lcd.print("Toate libere");
+    } else if (distParcare > 15) {
+      lcd.print("Locuri 2-3 libere");
+    } else if (distParcare > 6) {
+      lcd.print("Loc 3 liber");
+    } else {
+      lcd.print("Toate ocupate");
+    }
   }
 }
 
@@ -61,64 +92,77 @@ void setup() {
 }
 
 void loop() {
-  long distIntrare = masurareDistanta(trigIntrare, echoIntrare);
-  long distIesire = masurareDistanta(trigIesire, echoIesire);
+  unsigned long acum = millis();
 
-  // === Mașină la intrare ===
-  if (distIntrare < 10) {
-    tone(buzzer, 1000, 200);
-    lcd.clear();
-    lcd.print("Masina intra...");
-    
-    deschideBariera();
-    delay(3000);  // timp să treacă mașina
-    inchideBariera();
+  switch (stare) {
+    case LIBER: {
+      if (acum - ultimaCitire < PERIOADA_CITIRE) break;
+      ultimaCitire = acum;
 
-    delay(2000);  // timp să ajungă la loc
-    long distParcare = masurareDistanta(trigParcare, echoParcare);
-    
-    lcd.clear();
-    if (distParcare > 24) {
-      lcd.print("Locuri libere");
-    } else if (distParcare > 15) {
-      lcd.print("Loc ocupat: 1");
-    } else if (distParcare > 6) {
-      lcd.print("Loc ocupat: 2");
-    } else {
-      lcd.print("Loc ocupat: 3");
+      long distIntrare = masurareDistanta(trigIntrare, echoIntrare);
+      long distIesire = masurareDistanta(trigIesire, echoIesire);
+
+      // 0 = fără ecou, nu e mașină; cerem 2 citiri la rând (evită declanșări false)
+      nrIntrare = (distIntrare > 0 && distIntrare < 10) ? nrIntrare + 1 : 0;
+      nrIesire = (distIesire > 0 && distIesire < 10) ? nrIesire + 1 : 0;
+
+      // === Mașină la intrare === (are prioritate, ca în varianta inițială)
+      if (nrIntrare >= 2) {
+        tone(buzzer, 1000, 200);
+        lcd.clear();
+        lcd.print("Masina intra...");
+        esteIntrare = true;
+        nrIntrare = 0;
+        treciLa(DESCHIDE);
+      }
+      // === Mașină la ieșire ===
+      else if (nrIesire >= 2) {
+        tone(buzzer, 800, 200);
+        lcd.clear();
+        lcd.print("Masina iese...");
+        esteIntrare = false;
+        nrIesire = 0;
+        treciLa(DESCHIDE);
+      }
+      break;
     }
 
-    delay(3000);
-    lcd.clear();
-  }
+    case DESCHIDE:                        // 0 -> 90 grade, un grad la 10 ms
+      if (acum - tPas >= PAS_SERVO_MS) {
+        tPas = acum;
+        pos++;
+        bariera.write(pos);
+        if (pos >= 90) treciLa(TRECE);
+      }
+      break;
 
-  // === Mașină la ieșire ===
-  else if (distIesire < 10) {
-    tone(buzzer, 800, 200);
-    lcd.clear();
-    lcd.print("Masina iese...");
+    case TRECE:                           // timp să treacă mașina
+      if (acum - tStare >= TIMP_TRECERE) treciLa(INCHIDE);
+      break;
 
-    deschideBariera();
-    delay(3000);
-    inchideBariera();
+    case INCHIDE:                         // 90 -> 0 grade
+      if (acum - tPas >= PAS_SERVO_MS) {
+        tPas = acum;
+        pos--;
+        bariera.write(pos);
+        if (pos <= 0) treciLa(ASTEAPTA_LOC);
+      }
+      break;
 
-    delay(1000);  // Așteaptă să se elibereze
-    long distParcare = masurareDistanta(trigParcare, echoParcare);
-
-    lcd.clear();
-    if (distParcare > 24) {
-      lcd.print("Toate libere");
-    } else if (distParcare > 15) {
-      lcd.print("Locuri 2-3 libere");
-    } else if (distParcare > 6) {
-      lcd.print("Loc 3 liber");
-    } else {
-      lcd.print("Toate ocupate");
+    case ASTEAPTA_LOC: {                  // timp să ajungă la loc / să se elibereze
+      unsigned long asteptare = esteIntrare ? 2000 : 1000;
+      if (acum - tStare >= asteptare) {
+        afiseazaLocuri(masurareDistanta(trigParcare, echoParcare));
+        treciLa(AFISEAZA);
+      }
+      break;
     }
 
-    delay(3000);
-    lcd.clear();
+    case AFISEAZA:
+      if (acum - tStare >= 3000) {
+        lcd.clear();
+        treciLa(LIBER);
+      }
+      break;
   }
-
-  delay(300);
 }
