@@ -7,7 +7,7 @@ LiquidCrystal lcd(12, 11, 2, 3, 4, 5);
 const int ledGreen = 9;
 const int ledRed = 6;
 const int buzzer = 7;
-const int pinFum = 8;        // senzor digital (fum/flacără, HIGH = detectat)
+const int pinFlacara = 8;    // senzor de flacără digital (HIGH = flacără detectată)
 const int pinTemp = A1;      // senzor de temperatură analogic (LM35: 10 mV / °C)
 
 const float PRAG_TEMPERATURA = 100.0f;           // °C
@@ -47,7 +47,7 @@ public:
         return temperatura > pragTemp;
     }
 
-    bool detecteazaFum() {
+    bool detecteazaFlacara() {
         if (pinDigital != -1) {
             return digitalRead(pinDigital) == HIGH;
         }
@@ -84,7 +84,7 @@ public:
     }
 };
 
-Senzor senzorFum(A0, pinFum);
+Senzor senzorFlacara(A0, pinFlacara);
 Senzor senzorTemp(pinTemp, PRAG_TEMPERATURA);
 DisplayManager display;
 
@@ -95,7 +95,7 @@ void setup() {
     pinMode(ledGreen, OUTPUT);
     pinMode(ledRed, OUTPUT);
     pinMode(buzzer, OUTPUT);
-    pinMode(pinFum, INPUT);
+    pinMode(pinFlacara, INPUT);
 
     display.initialize();
 }
@@ -107,11 +107,11 @@ void loop() {
     ultimaCitire = acum;
 
     float temperatura = senzorTemp.citesteTemperatura();
-    bool fumDetectat = senzorFum.detecteazaFum();
+    bool flacaraDetectata = senzorFlacara.detecteazaFlacara();
 
     // OR din motive de siguranță: oricare senzor poate declanșa alarma.
     // Alarmele false se reduc prin confirmare: trebuie CONFIRMARI_NECESARE citiri la rând.
-    bool pericol = fumDetectat || senzorTemp.depasestePrag(temperatura);
+    bool pericol = flacaraDetectata || senzorTemp.depasestePrag(temperatura);
     if (pericol) {
         if (confirmari < CONFIRMARI_NECESARE) confirmari++;
     } else {
