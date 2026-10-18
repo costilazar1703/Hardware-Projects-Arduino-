@@ -1,6 +1,5 @@
 // Definire pini
-// ATENȚIE: pinii 0 și 1 sunt RX/TX (serial/USB) și pot bloca încărcarea codului.
-// Mută firele: becurile pe 2, 3, 4, 5 și butonul joystick-ului pe 7.
+// pinii 0 și 1 sunt RX/TX și încurcă uploadul, de aceea becurile sunt pe 2-5 și butonul pe 7
 const int pinBecuri[] = {2, 3, 4, 5};
 const int pinButon = 7;
 const int pinVRx = A0;
@@ -62,8 +61,7 @@ void loop() {
     }
   }
 
-  // Buton joystick apăsat: reacționăm doar la APĂSARE (front HIGH -> LOW),
-  // nu cât timp e ținut, iar debounce-ul se face cu millis(), fără delay(200)
+  // buton apăsat: contează doar apăsarea (HIGH -> LOW), debounce cu millis()
   unsigned long acum = millis();
   if (stareButon == LOW && stareButonAnterioara == HIGH &&
       acum - ultimaSchimbare >= DEBOUNCE_MS) {

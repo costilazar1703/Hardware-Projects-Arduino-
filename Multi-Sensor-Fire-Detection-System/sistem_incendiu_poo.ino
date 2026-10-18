@@ -2,8 +2,7 @@
 
 LiquidCrystal lcd(12, 11, 2, 3, 4, 5);
 
-// Pini actuatori. ATENȚIE: LED-ul verde era pe pinul 1 (TX al portului serial,
-// intră în conflict cu USB/upload). Mută firul LED-ului verde de pe pinul 1 pe pinul 9.
+// Pini actuatori. LED verde pe 9 (pinul 1 e TX serial și încurcă uploadul)
 const int ledGreen = 9;
 const int ledRed = 6;
 const int buzzer = 7;
@@ -42,7 +41,7 @@ public:
         return (valoare * 5.0 / 1023.0) * 100.0;
     }
 
-    // Folosește pragul salvat în constructor (înainte era scris direct 100.0 în loop)
+    // folosește pragul din constructor
     bool depasestePrag(float temperatura) {
         return temperatura > pragTemp;
     }
@@ -64,7 +63,7 @@ public:
         lcd.clear();
     }
 
-    // Rescriem liniile complete (cu spații la final) în loc de lcd.clear(): fără clipire
+    // rescriu liniile întregi, fără lcd.clear(), ca să nu clipească
     void afisareNormal(float temperatura) {
         lcd.setCursor(0, 0);
         lcd.print("Sistem normal   ");
@@ -101,7 +100,7 @@ void setup() {
 }
 
 void loop() {
-    // Măsurăm periodic, fără delay(): loop-ul rămâne liber pentru alte sarcini
+    // măsor la 300 ms, fără delay
     unsigned long acum = millis();
     if (acum - ultimaCitire < INTERVAL_CITIRE) return;
     ultimaCitire = acum;
@@ -109,8 +108,8 @@ void loop() {
     float temperatura = senzorTemp.citesteTemperatura();
     bool flacaraDetectata = senzorFlacara.detecteazaFlacara();
 
-    // OR din motive de siguranță: oricare senzor poate declanșa alarma.
-    // Alarmele false se reduc prin confirmare: trebuie CONFIRMARI_NECESARE citiri la rând.
+    // OR: oricare senzor poate da alarma (siguranță). Pentru mai puține alarme
+    // false, trebuie 3 citiri la rând.
     bool pericol = flacaraDetectata || senzorTemp.depasestePrag(temperatura);
     if (pericol) {
         if (confirmari < CONFIRMARI_NECESARE) confirmari++;

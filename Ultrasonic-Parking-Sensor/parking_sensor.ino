@@ -16,7 +16,7 @@ const int ANGLE_OPEN = 0;                        // ridică bariera
 const int ANGLE_CLOSED = 90;                     // coboară bariera
 const unsigned long TIMP_BARIERA_DESCHISA = 4000;  // ms
 const unsigned long PERIOADA_CITIRE = 200;         // ms între serii de măsurători
-const byte CONFIRMARI = 3;                         // citiri identice la rând pentru a accepta o schimbare
+const byte CONFIRMARI = 3;                         // câte citiri la rând confirmă o schimbare
 
 bool bariereDeschisa = false;
 unsigned long momentDeschidere = 0;
@@ -49,7 +49,7 @@ void afiseazaStatus(byte mask) {
   if (mask == 0) lcd.print("niciunul");
 }
 
-// Ridică bariera și pornește cronometrul; închiderea se face în loop, fără delay(4000)
+// ridică bariera și pornește cronometrul (se închide în loop)
 void deschideBariera(const char *mesaj) {
   lcd.clear();
   lcd.print(mesaj);
@@ -76,7 +76,7 @@ void setup() {
 void loop() {
   unsigned long acum = millis();
 
-  // Coboară bariera după timpul stabilit (înlocuiește delay(4000) + write(90))
+  // coboară bariera după 4 secunde
   if (bariereDeschisa && acum - momentDeschidere >= TIMP_BARIERA_DESCHISA) {
     bariera.write(ANGLE_CLOSED);
     bariereDeschisa = false;
@@ -90,7 +90,7 @@ void loop() {
   long distSenzor2 = readDistanceCM(TRIG2, ECHO2); // Loc 1 & 2
   long distSenzor3 = readDistanceCM(TRIG3, ECHO3); // Loc 2 & 3
 
-  // Ridica bariera la intrare (2 citiri consecutive, ca să nu reacționeze la zgomot)
+  // Ridica bariera la intrare (2 citiri la rând)
   if (distIntrare > 0 && distIntrare <= 9) {
     if (nrIntrare < 2) nrIntrare++;
   } else {
@@ -101,7 +101,7 @@ void loop() {
     nrIntrare = 0;
   }
 
-  // Aceleași praguri calibrate manual; pe valori întregi "> 7.1" înseamnă "> 7", "> 11.1" înseamnă "> 11"
+  // pragurile calibrate manual (la numere întregi, >7.1 = >7 și >11.1 = >11)
   bool loc1 = false, loc2 = false, loc3 = false;
 
   if (distSenzor2 > 0 && distSenzor2 <= 7) loc1 = true;
@@ -113,7 +113,7 @@ void loop() {
 
   byte mask = (loc1 ? 1 : 0) | (loc2 ? 2 : 0) | (loc3 ? 4 : 0);
 
-  // Acceptăm o schimbare doar după CONFIRMARI citiri identice: un singur ecou greșit nu mai deschide bariera
+  // o schimbare se acceptă după 3 citiri la rând, ca un ecou greșit să nu deschidă bariera
   if (mask == maskCandidat) {
     if (nrConfirmari < CONFIRMARI) nrConfirmari++;
   } else {

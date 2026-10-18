@@ -1,4 +1,4 @@
-#include <Arduino_FreeRTOS.h>   // FreeRTOS pentru Arduino (biblioteca "FreeRTOS" din Library Manager)
+#include <Arduino_FreeRTOS.h>   // biblioteca FreeRTOS pentru Arduino
 #include <queue.h>
 #include <Servo.h>
 
@@ -19,17 +19,17 @@ const long DIST_LIMIT = 20;
 const int ANGLE_OPEN = 0;
 const int ANGLE_CLOSED = 90;
 
-// Milisecunde -> tick-uri FreeRTOS (un tick = portTICK_PERIOD_MS, ~15 ms pe Uno)
+// ms -> tick-uri FreeRTOS (un tick are ~15 ms pe Uno)
 #define MS(x) ((x) / portTICK_PERIOD_MS)
 
-// Evenimente trimise de la taskul de detecție la taskul barierei
-const uint8_t EVT_LOWER = 1;   // trenul a ajuns la Senzorul 2 -> coboară bariera
-const uint8_t EVT_RAISE = 2;   // trenul a ajuns la Senzorul 1 -> ridică bariera
+// evenimente trimise de la detecție către barieră
+const uint8_t EVT_LOWER = 1;   // senzorul 2 -> coboară bariera
+const uint8_t EVT_RAISE = 2;   // senzorul 1 -> ridică bariera
 
 Servo barrier;
-QueueHandle_t eventQueue;             // coadă de evenimente: Detect -> Barrier
-volatile bool trainPresent = false;   // adevărat de la coborâre până bariera e ridicată; citit de Alarm
-int barrierAngle = ANGLE_CLOSED;      // unghiul curent al servo-ului
+QueueHandle_t eventQueue;             // coada Detect -> Barrier
+volatile bool trainPresent = false;   // true cât timp trenul e în zonă; citit de Alarm
+int barrierAngle = ANGLE_CLOSED;      // unghiul curent
 
 long readDistance(int trig, int echo) {
   digitalWrite(trig, LOW);
@@ -42,9 +42,8 @@ long readDistance(int trig, int echo) {
   return duration * 0.034 / 2;
 }
 
-// Mută bariera pas cu pas (1 grad la ~15 ms), fără să blocheze celelalte taskuri.
-// Returnează true dacă a ajuns la țintă, false dacă ridicarea a fost întreruptă
-// de un eveniment nou. Coborârea nu se întrerupe niciodată (siguranță).
+// Mută bariera câte 1 grad, fără delay blocant. Ridicarea se oprește dacă vine
+// un eveniment nou, coborârea nu se oprește niciodată.
 bool moveBarrier(int target) {
   while (barrierAngle != target) {
     if (target == ANGLE_OPEN && uxQueueMessagesWaiting(eventQueue) > 0) {

@@ -17,7 +17,7 @@ const int servoPin = 13;
 
 Servo bariera;
 
-// Mașină de stări: fiecare pas durează sau așteaptă, fără delay() blocant
+// mașină de stări, fără delay()
 enum Stare { LIBER, DESCHIDE, TRECE, INCHIDE, ASTEAPTA_LOC, AFISEAZA };
 Stare stare = LIBER;
 bool esteIntrare = true;
@@ -102,11 +102,11 @@ void loop() {
       long distIntrare = masurareDistanta(trigIntrare, echoIntrare);
       long distIesire = masurareDistanta(trigIesire, echoIesire);
 
-      // 0 = fără ecou, nu e mașină; cerem 2 citiri la rând (evită declanșări false)
+      // 0 = fără ecou; cer 2 citiri la rând
       nrIntrare = (distIntrare > 0 && distIntrare < 10) ? nrIntrare + 1 : 0;
       nrIesire = (distIesire > 0 && distIesire < 10) ? nrIesire + 1 : 0;
 
-      // === Mașină la intrare === (are prioritate, ca în varianta inițială)
+      // === Mașină la intrare === (are prioritate)
       if (nrIntrare >= 2) {
         tone(buzzer, 1000, 200);
         lcd.clear();
